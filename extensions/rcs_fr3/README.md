@@ -70,3 +70,32 @@ For a maintained end-to-end example, see [examples/fr3/fr3_env_cartesian_control
 ```shell
 python -m rcs_fr3 --help
 ```
+
+## TAM (Torque Adaptation Module) hook — `tam` branch
+
+The `tam` branch adds a learned residual-torque hook to the async torque
+controllers of `hw::Franka` (`osc()` and `joint_controller()`), used by the
+[TAM](https://github.com/Dongwon-Son/TAM) sim-to-real stack:
+
+```
+tau_base = <RCS law>                     # gravity-free; libfranka adds gravity
+tau_d    = tau_base + tam.apply(...)     # residual from a SimAdaptor MLP (Eigen, ~0.1 ms)
+tau_d    = limitRate(...); clamp(torque_limit)   # unchanged RCS tail
+tam.finalize_row(tau_d)                  # 1 kHz history row published to the workstation
+```
+
+* `src/hw/TamHook.{h,cpp}` — ring-buffer history, embedding hand-off, adaptor
+  gating/ramp/clip; `src/hw/simadaptor.h` — the network + `.bin` loader
+  (verbatim from `pandapy_dw`); `src/hw/tam_hook_test.cpp` — standalone unit
+  test (`-DRCS_FR3_BUILD_TAM_HOOK_TEST=ON`, Eigen only).
+* Python: `hw.Franka.tam_load_adaptor / tam_set_embedding / tam_enable /
+  tam_set_ideal_model_has_gravity / tam_set_torque_limits / tam_get_history /
+  tam_status / tam_reset`, plus a standalone `hw.TamHook` for sim backends and
+  parity tests.
+* The workstation side (history encoder, mapping server, ZMQ bridge) lives in
+  the TAM / `pandapy_dw` repositories (`tam_nuc_bridge`); RCS itself gains no
+  new dependencies.
+* Raise `FrankaConfig.torque_limit` (default 5 Nm on the whole gravity-free
+  command) when using the hook, e.g. `[87,87,87,87,12,12,12]`.
+
+`rcs_panda` materializes the same sources, so both extensions carry the hook.

@@ -306,6 +306,7 @@ void Franka::osc() {
   const bool allow_high_collision = this->m_cfg.allow_high_collision;
 
   this->controller_time = 0.0;
+  this->tam_.on_control_start();
 
   // conservative collision and impedance behavior
   this->set_default_robot_behavior();
@@ -504,6 +505,18 @@ void Franka::osc() {
         if (dist2joint_min[i] < 0.1 && tau_d[i] < 0.) tau_d[i] = 0.;
       }
 
+      // TAM residual: tau_d is the gravity-free RCS command (libfranka adds
+      // gravity); the hook records the row and returns the learned residual.
+      {
+        const common::Vector7d tau_base_tam = tau_d;
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J(
+            robot_state.tau_J.data());
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J_d(
+            robot_state.tau_J_d.data());
+        tau_d << tau_d + this->tam_.apply(period.toSec(), q, dq, tau_base_tam,
+                                          gravity, tau_J_d, tau_J);
+      }
+
       std::array<double, 7> tau_d_array{};
       Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
 
@@ -517,6 +530,9 @@ void Franka::osc() {
           franka::kMaxTorqueRate, tau_d_array, robot_state.tau_J_d);
 
       TorqueSafetyGuardFn(tau_d_rate_limited, torque_limit);
+
+      this->tam_.finalize_row(
+          Eigen::Map<const common::Vector7d>(tau_d_rate_limited.data()));
 
       return tau_d_rate_limited;
     });
@@ -536,6 +552,7 @@ void Franka::joint_controller() {
   const common::Vector7d torque_limit = this->m_cfg.torque_limit;
   const bool allow_high_collision = this->m_cfg.allow_high_collision;
   this->controller_time = 0.0;
+  this->tam_.on_control_start();
 
   // conservative collision and impedance behavior
   this->set_default_robot_behavior();
@@ -600,6 +617,21 @@ void Franka::joint_controller() {
         if (dist2joint_min[i] < 0.1 && tau_d[i] < 0.) tau_d[i] = 0.;
       }
 
+      // TAM residual (see osc()); gravity from the libfranka model is only
+      // needed by the hook's history (ideal_model_has_gravity).
+      {
+        std::array<double, 7> gravity_array = model.gravity(robot_state);
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> gravity(
+            gravity_array.data());
+        const common::Vector7d tau_base_tam = tau_d;
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J(
+            robot_state.tau_J.data());
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J_d(
+            robot_state.tau_J_d.data());
+        tau_d << tau_d + this->tam_.apply(period.toSec(), q, dq, tau_base_tam,
+                                          gravity, tau_J_d, tau_J);
+      }
+
       std::array<double, 7> tau_d_array{};
       Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
 
@@ -613,6 +645,9 @@ void Franka::joint_controller() {
           franka::kMaxTorqueRate, tau_d_array, robot_state.tau_J_d);
 
       TorqueSafetyGuardFn(tau_d_rate_limited, torque_limit);
+
+      this->tam_.finalize_row(
+          Eigen::Map<const common::Vector7d>(tau_d_rate_limited.data()));
 
       return tau_d_rate_limited;
     });
@@ -793,6 +828,46 @@ common::Pose Franka::get_base_pose_in_world_coordinates() {
              ? this->m_cfg.world_to_robot.value()
              : common::Pose();
 }
+
+// ---- TAM (Torque Adaptation Module) forwarding -------------------------------
+
+bool Franka::tam_load_adaptor(const std::string& weight_path) {
+  return this->tam_.load_adaptor(weight_path);
+}
+
+void Franka::tam_set_embedding(const common::VectorXd& embedding) {
+  this->tam_.set_embedding(embedding);
+}
+
+uint64_t Franka::tam_get_embedding_seq() { return this->tam_.embedding_seq(); }
+
+void Franka::tam_enable(bool enabled) { this->tam_.enable(enabled); }
+
+bool Franka::tam_is_enabled() { return this->tam_.enabled(); }
+
+void Franka::tam_set_ideal_model_has_gravity(bool enabled) {
+  this->tam_.set_ideal_model_has_gravity(enabled);
+}
+
+bool Franka::tam_get_ideal_model_has_gravity() {
+  return this->tam_.ideal_model_has_gravity();
+}
+
+void Franka::tam_set_torque_limits(const common::Vector7d& limits) {
+  this->tam_.set_torque_limits(limits);
+}
+
+void Franka::tam_set_enable_ramp_s(double seconds) {
+  this->tam_.set_enable_ramp_s(seconds);
+}
+
+std::vector<TamHook::HistoryRow> Franka::tam_get_history(size_t max_rows) {
+  return this->tam_.get_history(max_rows);
+}
+
+TamHook::Status Franka::tam_status() { return this->tam_.status(); }
+
+void Franka::tam_reset() { this->tam_.on_control_start(); }
 
 void Franka::set_cartesian_position_internal(const common::Pose& pose,
                                              double max_time,

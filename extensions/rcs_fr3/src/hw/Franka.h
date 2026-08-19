@@ -11,7 +11,9 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
+#include "TamHook.h"
 #include "rcs/Kinematics.h"
 #include "rcs/LinearPoseTrajInterpolator.h"
 #include "rcs/Pose.h"
@@ -100,6 +102,9 @@ class Franka : public common::Robot {
   std::atomic<Controller> running_controller{Controller::none};
   std::exception_ptr background_exception = nullptr;
   std::mutex exception_mutex;
+  // TAM (Torque Adaptation Module) residual hook shared by osc() and
+  // joint_controller(); see TamHook.h.
+  TamHook tam_;
   void osc();
   void joint_controller();
   void zero_torque_controller();
@@ -160,6 +165,24 @@ class Franka : public common::Robot {
 
   void reset() override;
   void close() override {};
+
+  // ---- TAM (Torque Adaptation Module) -----------------------------------
+  // The hook adds a learned residual torque to the async torque controllers
+  // (osc / joint_controller) between the RCS law and the rate-limit/clamp
+  // tail, and records a 1 kHz history for the workstation history encoder.
+  TamHook& tam() { return this->tam_; }
+  bool tam_load_adaptor(const std::string& weight_path);
+  void tam_set_embedding(const common::VectorXd& embedding);
+  uint64_t tam_get_embedding_seq();
+  void tam_enable(bool enabled);
+  bool tam_is_enabled();
+  void tam_set_ideal_model_has_gravity(bool enabled);
+  bool tam_get_ideal_model_has_gravity();
+  void tam_set_torque_limits(const common::Vector7d& limits);
+  void tam_set_enable_ramp_s(double seconds);
+  std::vector<TamHook::HistoryRow> tam_get_history(size_t max_rows);
+  TamHook::Status tam_status();
+  void tam_reset();
 };
 }  // namespace hw
 }  // namespace rcs

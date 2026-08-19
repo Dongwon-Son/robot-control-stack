@@ -4,6 +4,7 @@
 #include <hw/FrankaHand.h>
 #include <pybind11/cast.h>
 #include <pybind11/eigen.h>
+#include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -21,6 +22,82 @@
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
 namespace py = pybind11;
+
+
+namespace {
+
+py::dict tam_status_to_dict(const rcs::hw::TamHook::Status& st) {
+  py::dict d;
+  d["loaded"] = st.loaded;
+  d["enabled"] = st.enabled;
+  d["ideal_model_has_gravity"] = st.ideal_model_has_gravity;
+  d["embedding_seq"] = st.embedding_seq;
+  d["embedding_size"] = st.embedding_size;
+  d["expected_embedding_size"] = st.expected_embedding_size;
+  d["history_steps"] = st.history_steps;
+  d["dof"] = st.dof;
+  d["history_size"] = st.history_size;
+  d["rows_total"] = st.rows_total;
+  d["start_count"] = st.start_count;
+  d["adaptor_forward_dt_ms"] = st.adaptor_forward_dt_ms;
+  d["enable_scale"] = st.enable_scale;
+  d["last_skip_reason"] = st.last_skip_reason;
+  d["adaptor_path"] = st.adaptor_path;
+  d["torque_limits"] = st.torque_limits;
+  return d;
+}
+
+py::dict tam_history_to_dict(const std::vector<rcs::hw::TamHook::HistoryRow>& rows) {
+  const py::ssize_t n = static_cast<py::ssize_t>(rows.size());
+  auto vec7_array = [&](auto getter) {
+    py::array_t<double> arr({n, static_cast<py::ssize_t>(7)});
+    auto buf = arr.mutable_unchecked<2>();
+    for (py::ssize_t i = 0; i < n; ++i) {
+      const auto& v = getter(rows[static_cast<size_t>(i)]);
+      for (py::ssize_t j = 0; j < 7; ++j) buf(i, j) = v(j);
+    }
+    return arr;
+  };
+  py::array_t<double> t(n), sample_dt(n);
+  py::array_t<uint64_t> emb_seq(n);
+  py::array_t<bool> adaptor_active(n), valid(n), padding(n);
+  {
+    auto bt = t.mutable_unchecked<1>();
+    auto bdt = sample_dt.mutable_unchecked<1>();
+    auto bseq = emb_seq.mutable_unchecked<1>();
+    auto bact = adaptor_active.mutable_unchecked<1>();
+    auto bval = valid.mutable_unchecked<1>();
+    auto bpad = padding.mutable_unchecked<1>();
+    for (py::ssize_t i = 0; i < n; ++i) {
+      const auto& r = rows[static_cast<size_t>(i)];
+      bt(i) = r.t;
+      bdt(i) = r.sample_dt_sec;
+      bseq(i) = r.history_embedding_seq;
+      bact(i) = r.adaptor_active;
+      bval(i) = r.valid_for_history;
+      bpad(i) = r.synthetic_padding;
+    }
+  }
+  using Row = rcs::hw::TamHook::HistoryRow;
+  py::dict d;
+  d["t"] = t;
+  d["q"] = vec7_array([](const Row& r) { return r.q; });
+  d["dq"] = vec7_array([](const Row& r) { return r.dq; });
+  d["tau_base"] = vec7_array([](const Row& r) { return r.tau_base; });
+  d["tau_adaptor_delta"] = vec7_array([](const Row& r) { return r.tau_adaptor_delta; });
+  d["tau_applied"] = vec7_array([](const Row& r) { return r.tau_applied; });
+  d["tau_commanded"] = vec7_array([](const Row& r) { return r.tau_commanded; });
+  d["tau_measured"] = vec7_array([](const Row& r) { return r.tau_measured; });
+  d["gravity"] = vec7_array([](const Row& r) { return r.gravity; });
+  d["history_embedding_seq"] = emb_seq;
+  d["adaptor_active"] = adaptor_active;
+  d["valid_for_history"] = valid;
+  d["synthetic_padding"] = padding;
+  d["sample_dt_sec"] = sample_dt;
+  return d;
+}
+
+}  // namespace
 
 PYBIND11_MODULE(_core, m) {
   m.doc() = R"pbdoc(
@@ -302,6 +379,39 @@ PYBIND11_MODULE(_core, m) {
                     &rcs::hw::FHState::max_unnormalized_width)
       .def_readonly("temperature", &rcs::hw::FHState::temperature);
 
+  // ---- standalone TAM hook (usable without a robot: sim backends, parity tests)
+  py::class_<rcs::hw::TamHook, std::shared_ptr<rcs::hw::TamHook>>(hw, "TamHook")
+      .def(py::init<size_t>(), py::arg("max_history") = 4096)
+      .def("load_adaptor", &rcs::hw::TamHook::load_adaptor, py::arg("weight_path"))
+      .def("set_embedding", &rcs::hw::TamHook::set_embedding, py::arg("embedding"))
+      .def("embedding_seq", &rcs::hw::TamHook::embedding_seq)
+      .def("enable", &rcs::hw::TamHook::enable, py::arg("enabled"))
+      .def("enabled", &rcs::hw::TamHook::enabled)
+      .def("set_ideal_model_has_gravity", &rcs::hw::TamHook::set_ideal_model_has_gravity,
+           py::arg("enabled"))
+      .def("ideal_model_has_gravity", &rcs::hw::TamHook::ideal_model_has_gravity)
+      .def("set_torque_limits", &rcs::hw::TamHook::set_torque_limits, py::arg("limits"))
+      .def("set_enable_ramp_s", &rcs::hw::TamHook::set_enable_ramp_s, py::arg("seconds"))
+      .def("on_control_start", &rcs::hw::TamHook::on_control_start)
+      .def("apply", &rcs::hw::TamHook::apply, py::arg("period_sec"), py::arg("q"),
+           py::arg("dq"), py::arg("tau_base"), py::arg("gravity"), py::arg("tau_commanded"),
+           py::arg("tau_measured"),
+           "Append a history row and return the TAM residual for this control tick.")
+      .def("finalize_row", &rcs::hw::TamHook::finalize_row, py::arg("tau_applied"))
+      .def("last_q_hist", &rcs::hw::TamHook::last_q_hist)
+      .def("last_dq_hist", &rcs::hw::TamHook::last_dq_hist)
+      .def("last_tau_hist", &rcs::hw::TamHook::last_tau_hist)
+      .def("last_embedding_row", &rcs::hw::TamHook::last_embedding_row)
+      .def(
+          "status",
+          [](rcs::hw::TamHook& self) { return tam_status_to_dict(self.status()); })
+      .def(
+          "get_history",
+          [](rcs::hw::TamHook& self, size_t max_rows) {
+            return tam_history_to_dict(self.get_history(max_rows));
+          },
+          py::arg("max_rows") = 50);
+
   py::object robot =
       (py::object)py::module_::import("rcs").attr("common").attr("Robot");
   py::class_<rcs::hw::Franka, std::shared_ptr<rcs::hw::Franka>>(hw, "Franka",
@@ -336,7 +446,39 @@ PYBIND11_MODULE(_core, m) {
            &rcs::hw::Franka::set_cartesian_position_ik, py::arg("pose"))
       .def("set_cartesian_position_ik",
            &rcs::hw::Franka::set_cartesian_position_internal, py::arg("pose"),
-           py::arg("max_time"), py::arg("elbow"), py::arg("max_force") = 5);
+           py::arg("max_time"), py::arg("elbow"), py::arg("max_force") = 5)
+      // ---- TAM (Torque Adaptation Module) hook ------------------------------
+      .def("tam_load_adaptor", &rcs::hw::Franka::tam_load_adaptor,
+           py::arg("weight_path"),
+           "Load a SimAdaptor weight .bin (pandapy_dw / Sim2realAdaptor export) "
+           "into the torque-controller TAM hook. Returns True on success.")
+      .def("tam_set_embedding", &rcs::hw::Franka::tam_set_embedding,
+           py::arg("embedding"),
+           "Set the latest history-encoder embedding (flat float vector).")
+      .def("tam_get_embedding_seq", &rcs::hw::Franka::tam_get_embedding_seq)
+      .def("tam_enable", &rcs::hw::Franka::tam_enable, py::arg("enabled"))
+      .def("tam_is_enabled", &rcs::hw::Franka::tam_is_enabled)
+      .def("tam_set_ideal_model_has_gravity",
+           &rcs::hw::Franka::tam_set_ideal_model_has_gravity, py::arg("enabled"))
+      .def("tam_get_ideal_model_has_gravity",
+           &rcs::hw::Franka::tam_get_ideal_model_has_gravity)
+      .def("tam_set_torque_limits", &rcs::hw::Franka::tam_set_torque_limits,
+           py::arg("limits"), "Per-joint clip of the TAM residual in Nm (7 values).")
+      .def("tam_set_enable_ramp_s", &rcs::hw::Franka::tam_set_enable_ramp_s,
+           py::arg("seconds"))
+      .def("tam_reset", &rcs::hw::Franka::tam_reset,
+           "Clear the TAM history and embedding (same as a control-thread start).")
+      .def(
+          "tam_status",
+          [](rcs::hw::Franka& self) { return tam_status_to_dict(self.tam_status()); },
+          "Snapshot of the TAM hook state as a dict.")
+      .def(
+          "tam_get_history",
+          [](rcs::hw::Franka& self, size_t max_rows) {
+            return tam_history_to_dict(self.tam_get_history(max_rows));
+          },
+          py::arg("max_rows") = 50,
+          "Newest publish-ready TAM history rows (oldest first) as a dict of numpy arrays.");
 
   py::object gripper =
       (py::object)py::module_::import("rcs").attr("common").attr("Gripper");
