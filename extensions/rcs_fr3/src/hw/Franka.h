@@ -176,8 +176,6 @@ class Franka : public common::Robot {
   uint64_t tam_get_embedding_seq();
   void tam_enable(bool enabled);
   bool tam_is_enabled();
-  void tam_set_ideal_model_has_gravity(bool enabled);
-  bool tam_get_ideal_model_has_gravity();
   void tam_set_torque_limits(const common::Vector7d& limits);
   void tam_set_enable_ramp_s(double seconds);
   std::vector<TamHook::HistoryRow> tam_get_history(size_t max_rows);

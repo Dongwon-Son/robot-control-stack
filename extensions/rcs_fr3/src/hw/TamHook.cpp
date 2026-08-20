@@ -88,16 +88,6 @@ bool TamHook::enabled() const {
   return enabled_;
 }
 
-void TamHook::set_ideal_model_has_gravity(bool enabled) {
-  std::lock_guard<std::mutex> lock(mux_);
-  ideal_model_has_gravity_ = enabled;
-}
-
-bool TamHook::ideal_model_has_gravity() const {
-  std::lock_guard<std::mutex> lock(mux_);
-  return ideal_model_has_gravity_;
-}
-
 void TamHook::set_torque_limits(const Vec7& limits) {
   std::lock_guard<std::mutex> lock(mux_);
   torque_limits_ = limits.cwiseAbs();
@@ -127,7 +117,6 @@ TamHook::Status TamHook::status() const {
   Status s;
   s.loaded = static_cast<bool>(adaptor_);
   s.enabled = enabled_;
-  s.ideal_model_has_gravity = ideal_model_has_gravity_;
   s.embedding_seq = embedding_seq_;
   s.embedding_size = static_cast<int>(embedding_.size());
   s.expected_embedding_size = adaptor_ ? adaptor_->expected_history_embedding_cols() : 0;
@@ -191,7 +180,6 @@ TamHook::Vec7 TamHook::apply(double period_sec, const Vec7& q, const Vec7& dq,
   adaptor::M tau_hist;
   std::shared_ptr<adaptor::SimAdaptor> adaptor_ptr;
   double enable_scale = 0.0;
-  bool ideal_model_has_gravity = true;
   Vec7 torque_limits = Vec7::Zero();
   std::string skip_reason;
 
@@ -246,7 +234,6 @@ TamHook::Vec7 TamHook::apply(double period_sec, const Vec7& q, const Vec7& dq,
 
     enable_scale = enable_scale_locked(now);
     last_enable_scale_ = enable_scale;
-    ideal_model_has_gravity = ideal_model_has_gravity_;
     torque_limits = torque_limits_;
 
     const bool have_adaptor = enabled_ && adaptor_;
@@ -275,10 +262,9 @@ TamHook::Vec7 TamHook::apply(double period_sec, const Vec7& q, const Vec7& dq,
         const bool row_valid = (t == 0) ? current_valid_for_history : s.valid_for_history;
         Vec7 tau_src = Vec7::Zero();
         if (row_valid) {
+          // Adaptor torque inputs are in the ideal-model (gravity-included) space.
           tau_src = (t == 0) ? tau_base : s.tau_applied;
-          if (ideal_model_has_gravity) {
-            tau_src += (t == 0) ? gravity : s.gravity;
-          }
+          tau_src += (t == 0) ? gravity : s.gravity;
         }
         for (int j = 0; j < D && j < 7; ++j) {
           q_hist(0, offset + j) = row_valid ? static_cast<float>(s.q(j)) : 0.0f;

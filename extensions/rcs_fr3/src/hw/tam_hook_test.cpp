@@ -199,14 +199,6 @@ void test_adaptor_gating_clip_and_gravity() {
   adaptor::M q_hist = hook.last_q_hist();
   EXPECT_NEAR(q_hist(0, 0), 0.1, 1e-6);
 
-  // Without ideal-model gravity the torque history is the raw libfranka command.
-  hook.set_ideal_model_has_gravity(false);
-  delta = hook.apply(0.001, vec7(0.1), vec7(0.0), tau_base, gravity, vec7(0.0), vec7(0.0));
-  hook.finalize_row(tau_base + delta);
-  tau_hist = hook.last_tau_hist();
-  EXPECT_NEAR(tau_hist(0, (history_steps - 1) * dof + 0), 1.0, 1e-6);
-  EXPECT_NEAR(tau_hist(0, (history_steps - 1) * dof + 6), 3.0, 1e-6);
-
   // Custom clip limits are honoured.
   hook.set_torque_limits(vec7(2.5));
   delta = hook.apply(0.001, vec7(0.1), vec7(0.0), tau_base, gravity, vec7(0.0), vec7(0.0));

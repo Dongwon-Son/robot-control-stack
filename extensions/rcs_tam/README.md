@@ -1,53 +1,68 @@
-# RCS TAM extension (`rcs_tam`)
+# RCS TAM extension (`rcs_tam`) — single-process deployment
 
-NUC-side bridge for [TAM](https://github.com/Dongwon-Son/TAM) (Torque Adaptation
-Module) on top of robot-control-stack. It serves the TAM history/embedding ZMQ
-protocol — PUB history windows (`:5555`), async commands (`:5556`), reliable
-commands (`:5557`) — over the `TamHook` that the `tam` branch adds to
-`hw::Franka` (`rcs_panda` / `rcs_fr3`). The workstation side (history encoder,
-`mapping_server.py`, clients, launchers) is unchanged.
+[TAM](https://github.com/Dongwon-Son/TAM) (Torque Adaptation Module) on
+robot-control-stack, everything on **one machine in one Python process**:
 
 ```
-workstation (GPU)  ──ZMQ──▶  NUC: python -m rcs_tam  ──pybind──▶  hw.Franka + TamHook  ──FCI──▶  Panda/FR3
- history encoder → z          rcs_tam.bridge / rcs_backend          osc()/joint_controller() + residual
+one machine, one process
+┌──────────────────────────────────────────────────────────────┐      ┌─────────────┐
+│ Python: TamDeployment (JAX history encoder, ~5 Hz embeddings) │      │ Franka      │
+│   robot.tam_get_history() ──► encoder ──► robot.tam_set_embedding()  │ FCI         │
+│ Python: policy / example loop (20 Hz joint or Cartesian targets)│◄──▶│ 1 kHz torque│
+│ C++ (RCS control thread): hw.Franka osc()/joint_controller()  │ FCI  │             │
+│   + TamHook: tau_d += residual(local window, embedding)       │      │             │
+└──────────────────────────────────────────────────────────────┘      └─────────────┘
 ```
 
-## Install (NUC, after building `rcs-core` and `rcs_panda`/`rcs_fr3` from the `tam` branch)
+No realtime kernel is required: the example opens the robot with
+`FrankaConfig.ignore_realtime=True` (libfranka `kIgnore`), so a stock kernel
+works — the 1 kHz callback then runs without RT scheduling, keep the machine
+lightly loaded and prefer a machine with a GPU for the encoder (the fused
+history encoder is ~20× slower than real time on CPU; embeddings then update
+slower but the 1 kHz residual keeps using the latest one).
+
+## Install (after building `rcs-core` and `rcs_panda`/`rcs_fr3` from this branch)
 
 ```shell
-pip install -e extensions/rcs_tam          # numpy + pyzmq only
-python -m rcs_tam --robot panda --print-config
-python -m rcs_tam --robot panda            # serves the protocol; holds the current pose with the RCS joint controller
+pip install -e extensions/rcs_tam        # numpy, jax, flax, einops, tqdm, mujoco, mujoco-mjx
 ```
 
-Configuration: `--config rcs_tam_config.json` (schema in
-`rcs_tam_config.example.json` / `rcs_tam/config.py`) or flags.
-Important defaults: `FrankaConfig.torque_limit` is set to `87,87,87,87,12,12,12`
-(RCS' own 5 Nm default clips the TAM residual); TAM residual clip
-`10,10,10,10,8,8,8`; the adaptor is enabled by the workstation after the first
-embedding.
+## Run
 
-## Modules
+```shell
+python extensions/rcs_tam/examples/franka_tam_direct.py \
+    --robot panda --ip 192.168.0.52 --ckpt /path/to/tam_checkpoint \
+    --motion sine --duration-s 30 --residual-clip 2
+```
 
-| module | role |
+The script connects, exports the checkpoint's adaptor into the controller-side
+`TamHook` (`robot.tam_load_adaptor`), starts the RCS joint controller and the
+encoder thread, streams a sinusoidal joint reference, and enables TAM after the
+first embedding. `--no-tam` runs the identical motion as a baseline.
+
+Supported checkpoints (mode auto-resolved from the checkpoint):
+
+| checkpoint | history_torque_mode |
 | --- | --- |
-| `protocol.py` | wire format: history sample dict, async dedup/merge, `{"cmd": ...}` normalization, reset publish |
-| `backend.py` | `BridgeBackend` interface (+ `history_rows_dict_to_samples`) |
-| `bridge.py` | `TamBridge`: PUB/PULL/REP loop, resets, stale-stream neutralization, bin upload |
-| `rcs_backend.py` | `RcsBackend`: `target_q → controller_set_joint_position`, Cartesian targets → `osc_set_cartesian_position`, TAM commands → `robot.tam_*`, reflex/force safety resets |
-| `env_wrapper.py` | `TamBridgeWrapper(env, endpoints)`: run the bridge next to an RCS hardware gym env (policy via gym, TAM over ZMQ) |
-| `config.py` | JSON + env configuration |
+| Panda-specific TAM | `applied` (one applied-torque history stream) |
+| DAgger-finetuned | `applied` |
+| DAgger + fused input | `base_tam_fusion` (applied/base/residual streams + linear fusion) |
 
-Protocol features without an RCS equivalent (SysID torque maps, external-torque
-prediction, soft-block, test disturbances, feedforward torque, live gain
-changes) answer `ok=False, unsupported=True`; disabling them is a no-op success.
+The ideal model always includes gravity: the hook feeds `tau + gravity` to the
+adaptor and the vendored inference code rejects checkpoints trained otherwise.
+Raise `FrankaConfig.torque_limit` (RCS default 5 Nm clips the residual; the
+example uses 87/87/87/87/12/12/12) and keep the TAM residual clip
+(`robot.tam_set_torque_limits`, default 10/10/10/10/8/8/8) small on first runs.
 
-## Tests
+## Layout
 
-```shell
-python -m pytest extensions/rcs_tam/tests -q     # fake backend, localhost ZMQ; no robot
-```
+| path | role |
+| --- | --- |
+| `src/rcs_tam/runtime.py` | `TamDeployment`: checkpoint load, mode resolution, bin export, encoder thread, controller-restart handling |
+| `src/rcs_tam/simadaptor/` | vendored TAM inference code (checkpoint restore, streaming AR history encoder, models, ideal-model physics) — no external TAM dependency |
+| `examples/franka_tam_direct.py` | the single-script example |
+| `tests/test_runtime.py` | offline unit tests (fake robot/runtimes) |
+| `tests/checkpoint_smoke.py` | robot-free end-to-end check of a real checkpoint through the real C++ `TamHook` |
 
-A MuJoCo backend for hardware-free system tests (bridge + RCS torque-law
-replica + `hw.TamHook`) lives in the TAM repository
-(`simadaptor.deploy.rcs_mujoco_backend`, `scripts/deploy/rcs_tam_bridge_sim_smoke.py`).
+The C++ side (`TamHook`, `hw.Franka.tam_*`) lives in `extensions/rcs_fr3/src/hw`
+and is shared by `rcs_panda`.

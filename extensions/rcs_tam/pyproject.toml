@@ -5,18 +5,22 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rcs_tam"
 version = "0.7.2"
-description = "RCS TAM (Torque Adaptation Module) NUC bridge: serves the TAM history/embedding ZMQ protocol on top of hw.Franka's TamHook"
+description = "TAM (Torque Adaptation Module) for robot-control-stack: single-process deployment (JAX history encoder + hw.Franka TamHook)"
 readme = "README.md"
 license = "AGPL-3.0-or-later"
-# numpy + pyzmq only; the hardware entrypoint additionally needs rcs-core and
-# rcs_panda / rcs_fr3 built from the `tam` branch (they are imported lazily so
-# the protocol/bridge modules stay importable in workstation/sim environments).
-dependencies = ["numpy", "pyzmq>=25"]
+# The robot side additionally needs rcs-core and rcs_panda / rcs_fr3 built from
+# this fork; they are imported lazily so the inference code stays usable alone.
+dependencies = [
+  "numpy",
+  "jax",
+  "flax",
+  "einops",
+  "tqdm",
+  "mujoco",
+  "mujoco-mjx",
+]
 authors = [{ name = "Dongwon Son" }]
 requires-python = ">=3.10"
-
-[project.optional-dependencies]
-gym = ["gymnasium"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

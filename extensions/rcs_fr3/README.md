@@ -92,10 +92,11 @@ tam.finalize_row(tau_d)                  # 1 kHz history row published to the wo
   tam_set_ideal_model_has_gravity / tam_set_torque_limits / tam_get_history /
   tam_status / tam_reset`, plus a standalone `hw.TamHook` for sim backends and
   parity tests.
-* The NUC-side ZMQ bridge that streams the hook's history to the TAM
-  workstation and receives embeddings is the pure-Python extension
-  `extensions/rcs_tam` (`python -m rcs_tam`); the history encoder / mapping
-  server live in the TAM repository. RCS core gains no new dependencies.
+* The TAM history encoder runs in the same Python process
+  (`extensions/rcs_tam`, `rcs_tam.TamDeployment`): it reads
+  `robot.tam_get_history()`, computes the latent embedding with the vendored
+  TAM inference code, and writes it back via `robot.tam_set_embedding()`.
+  Single machine, no separate workstation; RCS core gains no new dependencies.
 * Raise `FrankaConfig.torque_limit` (default 5 Nm on the whole gravity-free
   command) when using the hook, e.g. `[87,87,87,87,12,12,12]`.
 

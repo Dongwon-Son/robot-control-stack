@@ -14,7 +14,10 @@
 // It keeps a bounded 1 kHz history ring buffer (q, dq, torque decomposition,
 // gravity) that a non-realtime thread reads through get_history() to stream
 // to the workstation history encoder, and it receives the encoder's latent
-// embedding through set_embedding().  Row semantics (publish_ready gating,
+// embedding through set_embedding().  The ideal MuJoCo model of TAM includes
+// gravity while libfranka commands exclude it, so the torque history fed to
+// the adaptor is always the applied command plus the model gravity term.
+// Row semantics (publish_ready gating,
 // zero-torque validity masking, synthetic padding, per-row embedding sequence)
 // follow the TAM history/embedding contract expected by the TAM workstation
 // stack (https://github.com/Dongwon-Son/TAM).
@@ -63,7 +66,6 @@ class TamHook {
   struct Status {
     bool loaded = false;
     bool enabled = false;
-    bool ideal_model_has_gravity = true;
     uint64_t embedding_seq = 0;
     int embedding_size = 0;
     int expected_embedding_size = 0;
@@ -87,8 +89,6 @@ class TamHook {
   uint64_t embedding_seq() const;
   void enable(bool enabled);
   bool enabled() const;
-  void set_ideal_model_has_gravity(bool enabled);
-  bool ideal_model_has_gravity() const;
   void set_torque_limits(const Vec7& limits);
   void set_enable_ramp_s(double seconds);
   std::vector<HistoryRow> get_history(size_t max_rows) const;
@@ -134,7 +134,6 @@ class TamHook {
   bool started_ = false;
   Eigen::VectorXd embedding_;
   uint64_t embedding_seq_ = 0;
-  bool ideal_model_has_gravity_ = true;
   Vec7 torque_limits_;
   double enable_ramp_s_ = 1.0;
   double adaptor_forward_dt_ms_ = 0.0;

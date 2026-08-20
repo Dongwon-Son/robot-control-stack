@@ -1,27 +1,24 @@
-"""RCS TAM bridge: serve the TAM history/embedding ZMQ protocol on top of the ``TamHook`` of ``hw.Franka``.
+"""TAM (Torque Adaptation Module) for robot-control-stack — single-process deployment.
 
-Modules:
-
-* ``protocol``    -- wire protocol helpers (history sample format, async command
-                     dedup/merge, reliable command normalization, reset publish)
-* ``backend``     -- ``BridgeBackend`` interface + helpers
-* ``bridge``      -- ``TamBridge``: PUB/PULL/REP loop over a backend
-* ``rcs_backend`` -- ``RcsBackend``: ``hw.Franka`` (rcs_panda / rcs_fr3, ``tam`` branch)
-* ``env_wrapper`` -- ``TamBridgeWrapper``: run the bridge next to an RCS gym env
-* ``config``      -- JSON/env configuration (network, timing, safety)
-* ``__main__``    -- ``python -m rcs_tam`` NUC entrypoint
-
-The workstation side (history encoder, mapping server, clients) lives in the TAM
-repository and is unchanged.
+``hw.Franka`` (rcs_panda / rcs_fr3, this fork) applies the TAM residual at
+1 kHz through its built-in ``TamHook``; :class:`TamDeployment` runs the JAX
+history encoder in the same Python process and keeps the hook's latent
+embedding fresh. See ``examples/franka_tam_direct.py`` for the single-script
+usage and ``rcs_tam.simadaptor`` for the vendored TAM inference code.
 """
 
-from rcs_tam.backend import BridgeBackend, UnsupportedCommand, history_rows_dict_to_samples  # noqa: F401
-from rcs_tam.bridge import BridgeEndpoints, TamBridge  # noqa: F401
+from rcs_tam.runtime import (  # noqa: F401
+    HISTORY_TORQUE_MODE_APPLIED,
+    HISTORY_TORQUE_MODE_AUTO,
+    HISTORY_TORQUE_MODE_BASE_TAM_FUSION,
+    TamDeployment,
+    resolve_history_torque_mode,
+)
 
 __all__ = [
-    "BridgeBackend",
-    "BridgeEndpoints",
-    "TamBridge",
-    "UnsupportedCommand",
-    "history_rows_dict_to_samples",
+    "HISTORY_TORQUE_MODE_APPLIED",
+    "HISTORY_TORQUE_MODE_AUTO",
+    "HISTORY_TORQUE_MODE_BASE_TAM_FUSION",
+    "TamDeployment",
+    "resolve_history_torque_mode",
 ]

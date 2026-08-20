@@ -30,7 +30,6 @@ py::dict tam_status_to_dict(const rcs::hw::TamHook::Status& st) {
   py::dict d;
   d["loaded"] = st.loaded;
   d["enabled"] = st.enabled;
-  d["ideal_model_has_gravity"] = st.ideal_model_has_gravity;
   d["embedding_seq"] = st.embedding_seq;
   d["embedding_size"] = st.embedding_size;
   d["expected_embedding_size"] = st.expected_embedding_size;
@@ -387,9 +386,6 @@ PYBIND11_MODULE(_core, m) {
       .def("embedding_seq", &rcs::hw::TamHook::embedding_seq)
       .def("enable", &rcs::hw::TamHook::enable, py::arg("enabled"))
       .def("enabled", &rcs::hw::TamHook::enabled)
-      .def("set_ideal_model_has_gravity", &rcs::hw::TamHook::set_ideal_model_has_gravity,
-           py::arg("enabled"))
-      .def("ideal_model_has_gravity", &rcs::hw::TamHook::ideal_model_has_gravity)
       .def("set_torque_limits", &rcs::hw::TamHook::set_torque_limits, py::arg("limits"))
       .def("set_enable_ramp_s", &rcs::hw::TamHook::set_enable_ramp_s, py::arg("seconds"))
       .def("on_control_start", &rcs::hw::TamHook::on_control_start)
@@ -458,10 +454,6 @@ PYBIND11_MODULE(_core, m) {
       .def("tam_get_embedding_seq", &rcs::hw::Franka::tam_get_embedding_seq)
       .def("tam_enable", &rcs::hw::Franka::tam_enable, py::arg("enabled"))
       .def("tam_is_enabled", &rcs::hw::Franka::tam_is_enabled)
-      .def("tam_set_ideal_model_has_gravity",
-           &rcs::hw::Franka::tam_set_ideal_model_has_gravity, py::arg("enabled"))
-      .def("tam_get_ideal_model_has_gravity",
-           &rcs::hw::Franka::tam_get_ideal_model_has_gravity)
       .def("tam_set_torque_limits", &rcs::hw::Franka::tam_set_torque_limits,
            py::arg("limits"), "Per-joint clip of the TAM residual in Nm (7 values).")
       .def("tam_set_enable_ramp_s", &rcs::hw::Franka::tam_set_enable_ramp_s,

@@ -617,8 +617,8 @@ void Franka::joint_controller() {
         if (dist2joint_min[i] < 0.1 && tau_d[i] < 0.) tau_d[i] = 0.;
       }
 
-      // TAM residual (see osc()); gravity from the libfranka model is only
-      // needed by the hook's history (ideal_model_has_gravity).
+      // TAM residual (see osc()); the libfranka gravity term feeds the hook's
+      // model-space torque history.
       {
         std::array<double, 7> gravity_array = model.gravity(robot_state);
         Eigen::Map<const Eigen::Matrix<double, 7, 1>> gravity(
@@ -844,14 +844,6 @@ uint64_t Franka::tam_get_embedding_seq() { return this->tam_.embedding_seq(); }
 void Franka::tam_enable(bool enabled) { this->tam_.enable(enabled); }
 
 bool Franka::tam_is_enabled() { return this->tam_.enabled(); }
-
-void Franka::tam_set_ideal_model_has_gravity(bool enabled) {
-  this->tam_.set_ideal_model_has_gravity(enabled);
-}
-
-bool Franka::tam_get_ideal_model_has_gravity() {
-  return this->tam_.ideal_model_has_gravity();
-}
 
 void Franka::tam_set_torque_limits(const common::Vector7d& limits) {
   this->tam_.set_torque_limits(limits);
