@@ -56,7 +56,7 @@ class HookRobot:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ckpt", required=True)
+    parser.add_argument("--ckpt", default=None, help="default: the packaged DAgger applied checkpoint")
     parser.add_argument("--xml", default=None)
     parser.add_argument("--history-torque-mode", default="auto")
     parser.add_argument("--warmup-s", type=float, default=6.0, help="History fed before waiting for the first embedding.")
@@ -75,9 +75,11 @@ def main(argv=None) -> int:
     hook = hw.TamHook(8192)
     hook.on_control_start()
     robot = HookRobot(hook)
+    from rcs_tam.assets import default_checkpoint
+
     tam = TamDeployment(
         robot,
-        args.ckpt,
+        args.ckpt if args.ckpt else default_checkpoint(),
         xml_path=args.xml,
         history_torque_mode=args.history_torque_mode,
         min_patches_before_send=1,

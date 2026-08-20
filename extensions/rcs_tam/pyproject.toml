@@ -26,7 +26,7 @@ requires-python = ">=3.10"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"rcs_tam.assets" = ["franka_panda/*.xml", "franka_panda/assets/*"]
+"rcs_tam.assets" = ["franka_panda/*.xml", "franka_panda/assets/*", "checkpoints/**"]
 
 [tool.black]
 line-length = 120

@@ -10,8 +10,12 @@ TAM corrects the torque command at 1 kHz inside the RCS control thread.
 
 Example::
 
-    python examples/franka_tam_direct.py --robot panda --ip 192.168.0.52 \
-        --ckpt /path/to/tam_checkpoint --motion sine --duration-s 30
+    python examples/franka_tam_direct.py --robot fr3 --ip 192.168.0.52 \
+        --motion sine --duration-s 30
+
+Defaults: the packaged DAgger-finetuned applied-torque checkpoint
+(``--ckpt`` overrides) and the packaged ideal-model MJCF (``--xml``
+overrides).
 
 Supported checkpoints: applied-torque history (the Panda-specific and DAgger
 finetuned checkpoints) and ``base_tam_fusion`` (the fused-input DAgger
@@ -42,7 +46,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--robot", choices=("panda", "fr3"), default="panda")
     p.add_argument("--ip", default="192.168.0.52", help="Franka FCI address.")
-    p.add_argument("--ckpt", required=True, help="TAM checkpoint directory (save_dict.pkl or checkpoint_<step>).")
+    p.add_argument("--ckpt", default=None, help="TAM checkpoint directory (default: the packaged DAgger-finetuned applied-torque checkpoint).")
     p.add_argument("--xml", default=None, help="Ideal-model MJCF (default: the packaged panda_pandagripper.xml the checkpoints were trained on).")
     p.add_argument("--history-torque-mode", choices=("auto", "applied", "base_tam_fusion"), default="auto")
     p.add_argument("--torque-limit", type=_parse_vec7, default=(87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0),
@@ -112,10 +116,12 @@ def main(argv=None) -> int:
         robot.move_home()
 
     from rcs_tam import TamDeployment
+    from rcs_tam.assets import default_checkpoint
 
+    ckpt_path = Path(args.ckpt) if args.ckpt else default_checkpoint()
     tam = TamDeployment(
         robot,
-        Path(args.ckpt),
+        ckpt_path,
         xml_path=args.xml,
         history_torque_mode=args.history_torque_mode,
         attention_history_s=float(args.attention_history_s),
