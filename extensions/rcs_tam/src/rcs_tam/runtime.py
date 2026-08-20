@@ -108,7 +108,7 @@ class TamDeployment:
         embedding_interval_s: float = 0.2,
         min_patches_before_send: int = 2,
         poll_period_s: float = 0.02,
-        history_rows: int = 200,
+        history_rows: int = 2000,
         enable_after_first_embedding: bool = True,
         residual_torque_limits: Optional[np.ndarray] = None,
         enable_ramp_s: Optional[float] = None,

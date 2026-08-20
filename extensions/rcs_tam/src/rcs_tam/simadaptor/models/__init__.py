@@ -1,2 +1,1 @@
-from .adaptor import *  # noqa: F401,F403
-from .transformer import *  # noqa: F401,F403
+"""Vendored TAM models modules (import submodules directly)."""

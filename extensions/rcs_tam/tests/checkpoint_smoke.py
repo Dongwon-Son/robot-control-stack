@@ -59,7 +59,9 @@ def main(argv=None) -> int:
     parser.add_argument("--ckpt", required=True)
     parser.add_argument("--xml", default=None)
     parser.add_argument("--history-torque-mode", default="auto")
-    parser.add_argument("--duration-s", type=float, default=8.0)
+    parser.add_argument("--warmup-s", type=float, default=6.0, help="History fed before waiting for the first embedding.")
+    parser.add_argument("--drain-timeout-s", type=float, default=600.0, help="Max wait for the first embedding (CPU encoders are slow).")
+    parser.add_argument("--active-s", type=float, default=5.0, help="History fed with the adaptor enabled (residual statistics).")
     parser.add_argument("--extension", choices=("panda", "fr3"), default="panda")
     args = parser.parse_args(argv)
 
@@ -78,7 +80,7 @@ def main(argv=None) -> int:
         args.ckpt,
         xml_path=args.xml,
         history_torque_mode=args.history_torque_mode,
-        min_patches_before_send=2,
+        min_patches_before_send=1,
         embedding_interval_s=0.2,
         residual_torque_limits=np.asarray([10.0, 10.0, 10.0, 10.0, 8.0, 8.0, 8.0]),
         enable_ramp_s=0.2,
@@ -88,39 +90,60 @@ def main(argv=None) -> int:
     home = np.asarray([0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785])
     amp = np.deg2rad(12.0) * np.asarray([1.0, 0.6, 0.8, 0.6, 1.0, 0.8, 1.0])
     dt = 1e-3
-    n = int(args.duration_s / dt)
     delta_max = 0.0
     delta_active_ticks = 0
-    t_start = time.perf_counter()
-    for i in range(n):
-        t = i * dt
-        q = home + amp * np.sin(2 * np.pi * t / 4.0)
-        dq = amp * (2 * np.pi / 4.0) * np.cos(2 * np.pi * t / 4.0)
-        gravity = 3.0 * np.sin(q) + 1.0
-        tau_base = 30.0 * amp * np.sin(2 * np.pi * t / 4.0 + 0.3)  # gravity-free command
-        delta = np.asarray(hook.apply(dt, q, dq, tau_base, gravity, np.zeros(7), tau_base + gravity))
-        hook.finalize_row(tau_base + delta)
-        if np.any(delta != 0.0):
-            delta_active_ticks += 1
-            delta_max = max(delta_max, float(np.max(np.abs(delta))))
-        if not np.all(np.isfinite(delta)):
-            print("FAIL: non-finite residual", delta)
-            return 1
-        # Keep roughly wall-clock pacing so the encoder thread interleaves.
-        lag = t_start + t - time.perf_counter()
-        if lag > 0:
-            time.sleep(min(lag, 0.001))
+    tick = 0
+
+    def feed(duration_s: float, count_active: bool) -> bool:
+        nonlocal delta_max, delta_active_ticks, tick
+        t_start = time.perf_counter()
+        for i in range(int(duration_s / dt)):
+            t = tick * dt
+            tick += 1
+            q = home + amp * np.sin(2 * np.pi * t / 4.0)
+            dq = amp * (2 * np.pi / 4.0) * np.cos(2 * np.pi * t / 4.0)
+            gravity = 3.0 * np.sin(q) + 1.0
+            tau_base = 30.0 * amp * np.sin(2 * np.pi * t / 4.0 + 0.3)  # gravity-free command
+            delta = np.asarray(hook.apply(dt, q, dq, tau_base, gravity, np.zeros(7), tau_base + gravity))
+            hook.finalize_row(tau_base + delta)
+            if not np.all(np.isfinite(delta)):
+                print("FAIL: non-finite residual", delta)
+                return False
+            if count_active and np.any(delta != 0.0):
+                delta_active_ticks += 1
+                delta_max = max(delta_max, float(np.max(np.abs(delta))))
+            lag = t_start + i * dt - time.perf_counter()
+            if lag > 0:
+                time.sleep(min(lag, 0.001))
+        return True
+
+    # Phase 1: build up history, then wait for the encoder to deliver the
+    # first embedding (fast on GPU, up to minutes for the fused mode on CPU).
+    if not feed(args.warmup_s, count_active=False):
+        return 1
+    deadline = time.perf_counter() + float(args.drain_timeout_s)
+    while time.perf_counter() < deadline and tam.stats["embeddings_sent"] < 1 and tam.stats["last_error"] is None:
+        time.sleep(0.5)
+    if tam.stats["embeddings_sent"] < 1:
+        tam.stop()
+        print(f"[smoke] FAIL: no embedding within {args.drain_timeout_s:.0f}s "
+              f"(last_error={tam.stats['last_error']!r})")
+        return 1
+    # Phase 2: adaptor enabled — measure the residual on fresh history.
+    if not feed(args.active_s, count_active=True):
+        return 1
     tam.stop()
     st = tam.status()
+    n_active = int(args.active_s / dt)
     print(
         f"[smoke] mode={st['mode']} embeddings_sent={st['embeddings_sent']} restarts={st['controller_restarts']} "
         f"skip={st.get('hook_last_skip_reason')!r} forward_ms={st.get('hook_adaptor_forward_dt_ms'):.3f} "
-        f"delta_active_ticks={delta_active_ticks}/{n} delta_max={delta_max:.3f} Nm"
+        f"delta_active_ticks={delta_active_ticks}/{n_active} delta_max={delta_max:.3f} Nm"
     )
     ok = (
-        st["embeddings_sent"] >= 2
+        st["embeddings_sent"] >= 1
         and st.get("hook_last_skip_reason") == ""
-        and delta_active_ticks > 1000
+        and delta_active_ticks > int(0.5 * n_active)
         and 0.0 < delta_max <= 10.0
         and st["last_error"] is None
     )
@@ -129,4 +152,10 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import os
+    import sys as _sys
+
+    rc = main()
+    _sys.stdout.flush()
+    _sys.stderr.flush()
+    os._exit(rc)  # skip interpreter teardown (JAX/mjx atexit can abort)
