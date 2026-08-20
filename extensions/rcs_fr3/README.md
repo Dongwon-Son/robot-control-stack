@@ -85,9 +85,9 @@ tam.finalize_row(tau_d)                  # 1 kHz history row published to the wo
 ```
 
 * `src/hw/TamHook.{h,cpp}` — ring-buffer history, embedding hand-off, adaptor
-  gating/ramp/clip; `src/hw/simadaptor.h` — the network + `.bin` loader
-  (verbatim from `pandapy_dw`); `src/hw/tam_hook_test.cpp` — standalone unit
-  test (`-DRCS_FR3_BUILD_TAM_HOOK_TEST=ON`, Eigen only).
+  gating/ramp/clip; `src/hw/simadaptor.h` — the SimAdaptor network + `.bin`
+  weight loader; `src/hw/tam_hook_test.cpp` — standalone unit test
+  (`-DRCS_FR3_BUILD_TAM_HOOK_TEST=ON`, Eigen only).
 * Python: `hw.Franka.tam_load_adaptor / tam_set_embedding / tam_enable /
   tam_set_ideal_model_has_gravity / tam_set_torque_limits / tam_get_history /
   tam_status / tam_reset`, plus a standalone `hw.TamHook` for sim backends and

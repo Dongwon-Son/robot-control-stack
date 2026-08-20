@@ -1,8 +1,8 @@
 """TAM NUC-bridge wire protocol (ZMQ + JSON).
 
-Message shapes (identical to the TAM reference NUC controller, so the
-workstation tooling — mapping server, ``HistoryControllerClient``, experiment
-launchers — works unchanged):
+Message shapes of the TAM history/embedding protocol consumed by the TAM
+workstation tooling (mapping server, ``HistoryControllerClient``, experiment
+launchers):
 
 * History publish (PUB)::
 

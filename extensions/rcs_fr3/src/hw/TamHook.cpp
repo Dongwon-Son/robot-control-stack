@@ -10,7 +10,7 @@ namespace hw {
 
 namespace {
 
-// Per-joint clip of the TAM residual (pandapy_dw kAdaptorTorqueLimitsNm).
+// Default per-joint clip of the TAM residual (Nm).
 constexpr double kDefaultAdaptorTorqueLimitsNm[7] = {10.0, 10.0, 10.0, 10.0,
                                                      8.0,  8.0,  8.0};
 

@@ -1,8 +1,7 @@
 """Configuration for ``python -m rcs_tam`` (JSON file + environment overrides).
 
-The JSON schema is a subset of the TAM reference NUC controller config so an
-existing ``history_controller_config.json`` can be reused unchanged (unknown
-blocks/keys are ignored)::
+Schema (see ``rcs_tam_config.example.json``; unknown blocks or keys are an
+error)::
 
     {
       "network": {"workstation_host": "192.168.1.100", "nuc_control_host": "192.168.1.101",
@@ -16,8 +15,8 @@ blocks/keys are ignored)::
     }
 
 Environment overrides: ``RCS_TAM_CONFIG`` (path), ``RCS_TAM_NUC_CONTROL_HOST``,
-``RCS_TAM_ROBOT_HOST`` (the ``PANDA_NUC_CONTROL_HOST`` / ``PANDA_ROBOT_HOST``
-names of the reference controller are honoured too).
+``RCS_TAM_ROBOT_HOST``, ``RCS_TAM_WORKSTATION_HOST``,
+``RCS_TAM_{HISTORY,COMMAND,REQUEST}_ENDPOINT``.
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 CONFIG_ENV = "RCS_TAM_CONFIG"
-DEFAULT_CONFIG_NAMES = ("rcs_tam_config.json", "history_controller_config.json")
+DEFAULT_CONFIG_NAMES = ("rcs_tam_config.json",)
 
 
 @dataclass
@@ -91,10 +90,10 @@ class RuntimeConfig:
     loaded_from: Optional[str] = None
 
 
-def _merge(obj: Any, values: Mapping[str, Any]) -> None:
+def _merge(obj: Any, block: str, values: Mapping[str, Any]) -> None:
     for key, value in values.items():
         if not hasattr(obj, key):
-            continue  # unknown keys (e.g. reference-controller blocks) are ignored
+            raise ValueError(f"unknown rcs_tam config key {block}.{key!r}")
         setattr(obj, key, value)
 
 
@@ -115,23 +114,25 @@ def load_runtime_config(path: Optional[str] = None, *, search_dir: Optional[Path
             data = json.load(f)
         if not isinstance(data, Mapping):
             raise TypeError("rcs_tam config must be a JSON object.")
-        for block, target in (("network", cfg.network), ("timing", cfg.timing), ("safety", cfg.safety), ("rcs", cfg.rcs)):
-            if isinstance(data.get(block), Mapping):
-                _merge(target, data[block])
+        targets = {"network": cfg.network, "timing": cfg.timing, "safety": cfg.safety, "rcs": cfg.rcs}
+        for block, values in data.items():
+            if block not in targets:
+                raise ValueError(f"unknown rcs_tam config block {block!r} (expected one of {sorted(targets)})")
+            if not isinstance(values, Mapping):
+                raise TypeError(f"rcs_tam config block {block!r} must be a JSON object")
+            _merge(targets[block], block, values)
         cfg.loaded_from = str(Path(config_path).expanduser())
     env = os.environ
-    cfg.network.nuc_control_host = env.get("RCS_TAM_NUC_CONTROL_HOST", env.get("PANDA_NUC_CONTROL_HOST", cfg.network.nuc_control_host))
-    cfg.network.robot_host = env.get("RCS_TAM_ROBOT_HOST", env.get("PANDA_ROBOT_HOST", cfg.network.robot_host))
-    cfg.network.workstation_host = env.get("RCS_TAM_WORKSTATION_HOST", env.get("PANDA_WORKSTATION_HOST", cfg.network.workstation_host))
-    for attr, names in (
-        ("history_endpoint", ("RCS_TAM_HISTORY_ENDPOINT", "PANDA_HISTORY_ENDPOINT")),
-        ("command_endpoint", ("RCS_TAM_COMMAND_ENDPOINT", "PANDA_COMMAND_ENDPOINT")),
-        ("request_endpoint", ("RCS_TAM_REQUEST_ENDPOINT", "PANDA_REQUEST_ENDPOINT")),
+    cfg.network.nuc_control_host = env.get("RCS_TAM_NUC_CONTROL_HOST", cfg.network.nuc_control_host)
+    cfg.network.robot_host = env.get("RCS_TAM_ROBOT_HOST", cfg.network.robot_host)
+    cfg.network.workstation_host = env.get("RCS_TAM_WORKSTATION_HOST", cfg.network.workstation_host)
+    for attr, name in (
+        ("history_endpoint", "RCS_TAM_HISTORY_ENDPOINT"),
+        ("command_endpoint", "RCS_TAM_COMMAND_ENDPOINT"),
+        ("request_endpoint", "RCS_TAM_REQUEST_ENDPOINT"),
     ):
-        for name in names:
-            if env.get(name):
-                setattr(cfg.network, attr, env[name])
-                break
+        if env.get(name):
+            setattr(cfg.network, attr, env[name])
     return cfg
 
 

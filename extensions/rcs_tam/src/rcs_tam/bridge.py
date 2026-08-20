@@ -1,6 +1,6 @@
 """Generic NUC-side TAM bridge: ZMQ PUB/PULL/REP loop over a :class:`BridgeBackend`.
 
-Wire protocol (identical to the TAM reference NUC controller, see ``rcs_tam.protocol``):
+Wire protocol (see ``rcs_tam.protocol``):
 
 * PUB  ``history_bind``  -> ``{"type": "history", "window": [sample, ...]}`` every
   ``publish_dt`` seconds and ``{"type": "reset", "reason": ...}`` on resets;

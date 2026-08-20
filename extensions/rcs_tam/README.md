@@ -20,8 +20,8 @@ python -m rcs_tam --robot panda --print-config
 python -m rcs_tam --robot panda            # serves the protocol; holds the current pose with the RCS joint controller
 ```
 
-Configuration: `--config rcs_tam_config.json` (an existing TAM
-`history_controller_config.json` is accepted; see `rcs_tam/config.py`) or flags.
+Configuration: `--config rcs_tam_config.json` (schema in
+`rcs_tam_config.example.json` / `rcs_tam/config.py`) or flags.
 Important defaults: `FrankaConfig.torque_limit` is set to `87,87,87,87,12,12,12`
 (RCS' own 5 Nm default clips the TAM residual); TAM residual clip
 `10,10,10,10,8,8,8`; the adaptor is enabled by the workstation after the first
@@ -38,7 +38,7 @@ embedding.
 | `env_wrapper.py` | `TamBridgeWrapper(env, endpoints)`: run the bridge next to an RCS hardware gym env (policy via gym, TAM over ZMQ) |
 | `config.py` | JSON + env configuration |
 
-Unsupported reference-controller features (SysID torque maps, external-torque
+Protocol features without an RCS equivalent (SysID torque maps, external-torque
 prediction, soft-block, test disturbances, feedforward torque, live gain
 changes) answer `ok=False, unsupported=True`; disabling them is a no-op success.
 

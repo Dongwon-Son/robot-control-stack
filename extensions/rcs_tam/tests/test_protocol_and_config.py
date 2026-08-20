@@ -45,17 +45,15 @@ class ProtocolTest(unittest.TestCase):
 
 
 class ConfigTest(unittest.TestCase):
-    def test_reference_controller_json_is_accepted(self) -> None:
+    def test_config_json_and_strict_schema(self) -> None:
         with TemporaryDirectory() as d:
-            path = Path(d) / "history_controller_config.json"
+            path = Path(d) / "rcs_tam_config.json"
             path.write_text(
                 json.dumps(
                     {
                         "network": {"nuc_control_host": "10.0.0.5", "robot_host": "10.0.1.2", "history_port": 6555},
-                        "fast_bridge": {"enabled": True},
                         "timing": {"history_pub_dt": 0.02, "history_len": 40},
-                        "safety": {"ext_force_threshold": 60.0, "virtual_wall_enabled": True},
-                        "controller": {"joint_stiffness": [1] * 7},
+                        "safety": {"ext_force_threshold": 60.0},
                         "rcs": {"torque_limit": [50] * 7, "adaptor_torque_limits": [5] * 7},
                     }
                 )
@@ -68,7 +66,20 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(cfg.safety.ext_force_threshold, 60.0)
             self.assertEqual(cfg.rcs.torque_limit, [50] * 7)
             self.assertEqual(cfg.rcs.adaptor_torque_limits, [5] * 7)
-            self.assertTrue(cfg.loaded_from.endswith("history_controller_config.json"))
+            self.assertTrue(cfg.loaded_from.endswith("rcs_tam_config.json"))
+
+            path.write_text(json.dumps({"network": {"nuc_control_host": "10.0.0.5"}, "fast_bridge": {"enabled": True}}))
+            with self.assertRaisesRegex(ValueError, "unknown rcs_tam config block 'fast_bridge'"):
+                load_runtime_config(str(path))
+            path.write_text(json.dumps({"timing": {"history_pub_dt": 0.02, "loop_dtt": 1.0}}))
+            with self.assertRaisesRegex(ValueError, "unknown rcs_tam config key timing.'loop_dtt'"):
+                load_runtime_config(str(path))
+
+    def test_example_config_parses(self) -> None:
+        example = Path(__file__).resolve().parents[1] / "rcs_tam_config.example.json"
+        cfg = load_runtime_config(str(example))
+        self.assertEqual(cfg.network.history_bind, "tcp://192.168.1.101:5555")
+        self.assertEqual(cfg.rcs.torque_limit, [87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0])
 
 
 if __name__ == "__main__":

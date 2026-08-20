@@ -8,8 +8,8 @@ configuration, and serves the TAM ZMQ protocol (history PUB :5555, async PULL
 ``target_q`` / Cartesian targets over the bridge or drive the same ``robot``
 through the RCS gym API in this process (see ``rcs_tam.env_wrapper``).
 
-Configuration: ``--config`` JSON (see ``rcs_tam.config``; an existing TAM
-``history_controller_config.json`` works) plus the flags below.
+Configuration: ``--config`` JSON (see ``rcs_tam.config`` and
+``rcs_tam_config.example.json``) plus the flags below.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m rcs_tam", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--robot", choices=("panda", "fr3"), default="panda", help="RCS extension to use.")
     p.add_argument("--robot-ip", default=None, help="FCI address (default: network.robot_host from the config).")
-    p.add_argument("--config", default=None, help="JSON config path (default: RCS_TAM_CONFIG, ./rcs_tam_config.json, ./history_controller_config.json).")
+    p.add_argument("--config", default=None, help="JSON config path (default: RCS_TAM_CONFIG env or ./rcs_tam_config.json).")
     p.add_argument("--host", default=None, help="Bind host for the three ZMQ sockets (default: network.nuc_control_host).")
     p.add_argument("--torque-limit", type=lambda s: _parse_vec(s, 7), default=None,
                    help="RCS FrankaConfig.torque_limit clamp on the gravity-free command, 1 or 7 values (config default 87/87/87/87/12/12/12; RCS' own default 5 Nm is too tight for TAM).")
@@ -51,7 +51,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--home-on-reset", action="store_true", help="Also move home on bridge resets.")
     p.add_argument("--no-start-controller", action="store_true", help="Do not start the RCS joint controller thread at startup.")
     p.add_argument("--require-remote-actuation-for-adaptor-enable", action="store_true",
-                   help="Queue enable_adaptor until fresh remote actuation arrives (reference-controller semantics).")
+                   help="Queue enable_adaptor until a fresh remote actuation command has been seen (guards against enabling the residual while nothing streams targets).")
     p.add_argument("--ext-force-threshold-n", type=float, default=None)
     p.add_argument("--ext-torque-threshold-nm", type=float, default=None)
     p.add_argument("--print-config", action="store_true", help="Print the resolved configuration and exit (no robot connection).")

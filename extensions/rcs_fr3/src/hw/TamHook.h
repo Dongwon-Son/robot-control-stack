@@ -14,12 +14,13 @@
 // It keeps a bounded 1 kHz history ring buffer (q, dq, torque decomposition,
 // gravity) that a non-realtime thread reads through get_history() to stream
 // to the workstation history encoder, and it receives the encoder's latent
-// embedding through set_embedding().  The design and the row semantics are a
-// port of pandapy_dw's HistoryJointPosition adaptor path (Dongwon Son), so
-// the existing TAM mapping server / bridge protocol works unchanged.
+// embedding through set_embedding().  Row semantics (publish_ready gating,
+// zero-torque validity masking, synthetic padding, per-row embedding sequence)
+// follow the TAM history/embedding contract expected by the TAM workstation
+// stack (https://github.com/Dongwon-Son/TAM).
 //
-// Only Eigen is required; simadaptor.h (Eigen MLP + weight loader) is a
-// verbatim copy of pandapy_dw/include/adaptor/simadaptor.h.
+// Only Eigen is required; simadaptor.h implements the SimAdaptor residual
+// network and the .bin weight format exported by TAM checkpoints.
 
 #include <Eigen/Dense>
 
@@ -95,7 +96,7 @@ class TamHook {
 
   // ---- realtime API (libfranka callback thread) ------------------------
   // Called when a control thread starts: clears history/embedding, resets
-  // the time origin and the enable ramp (mirrors pandapy_dw start()).
+  // the time origin and the enable ramp.
   void on_control_start();
   // Appends the current row and returns the TAM residual (gravity-free torque
   // units) to be added to tau_base.  Never throws.
