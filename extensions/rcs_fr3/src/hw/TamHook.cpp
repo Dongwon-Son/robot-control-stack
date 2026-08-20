@@ -12,7 +12,7 @@ namespace {
 
 // Default per-joint clip of the TAM residual (Nm).
 constexpr double kDefaultAdaptorTorqueLimitsNm[7] = {10.0, 10.0, 10.0, 10.0,
-                                                     8.0,  8.0,  8.0};
+                                                     4.0,  4.0,  4.0};
 
 bool is_effectively_zero_torque(const TamHook::Vec7& tau) {
   return tau.cwiseAbs().maxCoeff() <= TamHook::kZeroTorqueThresholdNm;
