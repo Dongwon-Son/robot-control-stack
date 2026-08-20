@@ -110,6 +110,10 @@ class Franka : public common::Robot {
   // TAM (Torque Adaptation Module) residual hook shared by osc() and
   // joint_controller(); see TamHook.h.
   TamHook tam_;
+  // Previous rate-limited gravity-free base command (TAM residual excluded);
+  // reference for franka::limitRate so the residual is not slew-limited and
+  // cannot be integrated into the base. Reset at control-thread start.
+  std::optional<std::array<double, 7>> rate_limit_prev_base_;
   void osc();
   void joint_controller();
   void zero_torque_controller();

@@ -330,6 +330,7 @@ void Franka::osc() {
 
   this->controller_time = 0.0;
   this->tam_.on_control_start();
+  this->rate_limit_prev_base_.reset();
 
   // conservative collision and impedance behavior
   this->set_default_robot_behavior();
@@ -528,18 +529,6 @@ void Franka::osc() {
         if (dist2joint_min[i] < 0.1 && tau_d[i] < 0.) tau_d[i] = 0.;
       }
 
-      // TAM residual: tau_d is the gravity-free RCS command (libfranka adds
-      // gravity); the hook records the row and returns the learned residual.
-      {
-        const common::Vector7d tau_base_tam = tau_d;
-        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J(
-            robot_state.tau_J.data());
-        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J_d(
-            robot_state.tau_J_d.data());
-        tau_d << tau_d + this->tam_.apply(period.toSec(), q, dq, tau_base_tam,
-                                          gravity, tau_J_d, tau_J);
-      }
-
       std::array<double, 7> tau_d_array{};
       Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
 
@@ -549,8 +538,36 @@ void Franka::osc() {
       auto time =
           std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
 
-      std::array<double, 7> tau_d_rate_limited = franka::limitRate(
-          franka::kMaxTorqueRate, tau_d_array, robot_state.tau_J_d);
+      // Rate-limit the gravity-free base command against the previous *base*
+      // command (own bookkeeping: robot_state.tau_J_d contains the previous
+      // TAM residual, and slewing the base toward base+residual would
+      // integrate the residual into the base). The TAM residual is added
+      // after the rate limiter — bounded by the hook's per-joint clip and
+      // enable ramp instead of the slew limit — and the total is clipped to
+      // torque_limit below.
+      if (!this->rate_limit_prev_base_.has_value()) {
+        this->rate_limit_prev_base_ = robot_state.tau_J_d;
+      }
+      const std::array<double, 7> tau_base_rate_limited = franka::limitRate(
+          franka::kMaxTorqueRate, tau_d_array, *this->rate_limit_prev_base_);
+      this->rate_limit_prev_base_ = tau_base_rate_limited;
+
+      std::array<double, 7> tau_d_rate_limited = tau_base_rate_limited;
+      {
+        std::array<double, 7> gravity_array = model.gravity(robot_state);
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> gravity_tam(
+            gravity_array.data());
+        Eigen::Map<const common::Vector7d> tau_base_rl(
+            tau_base_rate_limited.data());
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J(
+            robot_state.tau_J.data());
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J_d(
+            robot_state.tau_J_d.data());
+        const common::Vector7d tau_total =
+            tau_base_rl + this->tam_.apply(period.toSec(), q, dq, tau_base_rl,
+                                           gravity_tam, tau_J_d, tau_J);
+        Eigen::VectorXd::Map(&tau_d_rate_limited[0], 7) = tau_total;
+      }
 
       TorqueSafetyGuardFn(tau_d_rate_limited, torque_limit);
 
@@ -577,6 +594,7 @@ void Franka::joint_controller() {
   const bool allow_high_collision = this->m_cfg.allow_high_collision;
   this->controller_time = 0.0;
   this->tam_.on_control_start();
+  this->rate_limit_prev_base_.reset();
 
   // conservative collision and impedance behavior
   this->set_default_robot_behavior();
@@ -641,21 +659,6 @@ void Franka::joint_controller() {
         if (dist2joint_min[i] < 0.1 && tau_d[i] < 0.) tau_d[i] = 0.;
       }
 
-      // TAM residual (see osc()); the libfranka gravity term feeds the hook's
-      // model-space torque history.
-      {
-        std::array<double, 7> gravity_array = model.gravity(robot_state);
-        Eigen::Map<const Eigen::Matrix<double, 7, 1>> gravity(
-            gravity_array.data());
-        const common::Vector7d tau_base_tam = tau_d;
-        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J(
-            robot_state.tau_J.data());
-        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J_d(
-            robot_state.tau_J_d.data());
-        tau_d << tau_d + this->tam_.apply(period.toSec(), q, dq, tau_base_tam,
-                                          gravity, tau_J_d, tau_J);
-      }
-
       std::array<double, 7> tau_d_array{};
       Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
 
@@ -665,8 +668,36 @@ void Franka::joint_controller() {
       auto time =
           std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
 
-      std::array<double, 7> tau_d_rate_limited = franka::limitRate(
-          franka::kMaxTorqueRate, tau_d_array, robot_state.tau_J_d);
+      // Rate-limit the gravity-free base command against the previous *base*
+      // command (own bookkeeping: robot_state.tau_J_d contains the previous
+      // TAM residual, and slewing the base toward base+residual would
+      // integrate the residual into the base). The TAM residual is added
+      // after the rate limiter — bounded by the hook's per-joint clip and
+      // enable ramp instead of the slew limit — and the total is clipped to
+      // torque_limit below.
+      if (!this->rate_limit_prev_base_.has_value()) {
+        this->rate_limit_prev_base_ = robot_state.tau_J_d;
+      }
+      const std::array<double, 7> tau_base_rate_limited = franka::limitRate(
+          franka::kMaxTorqueRate, tau_d_array, *this->rate_limit_prev_base_);
+      this->rate_limit_prev_base_ = tau_base_rate_limited;
+
+      std::array<double, 7> tau_d_rate_limited = tau_base_rate_limited;
+      {
+        std::array<double, 7> gravity_array = model.gravity(robot_state);
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> gravity_tam(
+            gravity_array.data());
+        Eigen::Map<const common::Vector7d> tau_base_rl(
+            tau_base_rate_limited.data());
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J(
+            robot_state.tau_J.data());
+        Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_J_d(
+            robot_state.tau_J_d.data());
+        const common::Vector7d tau_total =
+            tau_base_rl + this->tam_.apply(period.toSec(), q, dq, tau_base_rl,
+                                           gravity_tam, tau_J_d, tau_J);
+        Eigen::VectorXd::Map(&tau_d_rate_limited[0], 7) = tau_total;
+      }
 
       TorqueSafetyGuardFn(tau_d_rate_limited, torque_limit);
 
