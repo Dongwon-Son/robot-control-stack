@@ -11,7 +11,7 @@ residual is finite and non-zero.
 
 Usage (rcs_panda or rcs_fr3 built from this branch)::
 
-    python tests/checkpoint_smoke.py --ckpt <tam checkpoint dir> [--xml robot.xml] [--duration-s 8]
+    python tests/checkpoint_smoke.py --ckpt <tam checkpoint dir>   # --xml overrides the packaged ideal-model MJCF
 """
 
 from __future__ import annotations

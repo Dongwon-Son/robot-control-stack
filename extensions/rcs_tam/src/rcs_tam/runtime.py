@@ -101,7 +101,7 @@ class TamDeployment:
         robot: Any,
         ckpt_path: str | Path,
         *,
-        xml_path: str | Path | None = None,
+        xml_path: str | Path | None = None,  # default: the packaged panda_pandagripper.xml
         history_torque_mode: str = HISTORY_TORQUE_MODE_AUTO,
         attention_history_s: float = 4.0,
         expected_dt: float = 1e-3,
@@ -130,11 +130,16 @@ class TamDeployment:
             # Test hook: (inf, mode, applied_runtime, base_runtime, tam_runtime, fusion_params)
             (self.inf, self.mode, self._applied, self._base, self._tam, self._fusion_params) = runtimes
         else:
+            from rcs_tam.assets import default_panda_xml
             from rcs_tam.simadaptor.deploy.history_runtime import RealTimeHistoryAdaptor
 
+            if xml_path is None:
+                # Packaged training MJCF of the supported Panda checkpoints.
+                xml_path = default_panda_xml()
+                self._log(f"[rcs_tam] ideal-model xml: packaged {xml_path}")
             self._applied = RealTimeHistoryAdaptor(
                 simadaptor_ckpt_path=str(ckpt_path),
-                xml_path=None if xml_path is None else str(xml_path),
+                xml_path=str(xml_path),
                 expected_dt=self.expected_dt,
                 attention_history_s=float(attention_history_s),
                 jax_cache_dir=jax_cache_dir,

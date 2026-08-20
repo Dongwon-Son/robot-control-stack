@@ -15,8 +15,9 @@ Example::
 
 Supported checkpoints: applied-torque history (the Panda-specific and DAgger
 finetuned checkpoints) and ``base_tam_fusion`` (the fused-input DAgger
-checkpoint); the mode is read from the checkpoint. Pass ``--xml`` only if the
-checkpoint bundle has no ``robot_model/robot.xml``.
+checkpoint); the mode is read from the checkpoint. The ideal-model MJCF
+defaults to the packaged ``panda_pandagripper.xml`` the checkpoints were
+trained on; pass ``--xml`` only to override it.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--robot", choices=("panda", "fr3"), default="panda")
     p.add_argument("--ip", default="192.168.0.52", help="Franka FCI address.")
     p.add_argument("--ckpt", required=True, help="TAM checkpoint directory (save_dict.pkl or checkpoint_<step>).")
-    p.add_argument("--xml", default=None, help="Robot MJCF for the ideal model (default: the checkpoint's robot_model).")
+    p.add_argument("--xml", default=None, help="Ideal-model MJCF (default: the packaged panda_pandagripper.xml the checkpoints were trained on).")
     p.add_argument("--history-torque-mode", choices=("auto", "applied", "base_tam_fusion"), default="auto")
     p.add_argument("--torque-limit", type=_parse_vec7, default=(87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0),
                    help="RCS FrankaConfig.torque_limit on the gravity-free command (RCS' own 5 Nm default is too tight).")
