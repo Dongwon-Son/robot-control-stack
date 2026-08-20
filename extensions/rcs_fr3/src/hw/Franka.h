@@ -40,11 +40,13 @@ struct FrankaConfig : common::RobotConfig {
   common::RobotPlatform robot_platform = common::RobotPlatform::HARDWARE;
   IKSolver ik_solver = IKSolver::rcs_ik;
   double speed_factor = DEFAULT_SPEED_FACTOR;
-  // values from deoxys/config/joint-impedance-controller.yml
+  // values from deoxys/config/joint-impedance-controller.yml, except joint 6:
+  // deoxys used kp=150 there; softened to 50 (kd=5, the wrist kd=kp/10
+  // convention) so the wrist is not disproportionately stiff.
   common::Vector7d kp =
-      (common::Vector7d() << 100., 100., 100., 100., 75., 150., 50.).finished();
+      (common::Vector7d() << 100., 100., 100., 100., 75., 50., 50.).finished();
   common::Vector7d kd =
-      (common::Vector7d() << 20., 20., 20., 20., 7.5, 15.0, 5.0).finished();
+      (common::Vector7d() << 20., 20., 20., 20., 7.5, 5.0, 5.0).finished();
   common::Vector7d torque_limit = common::Vector7d::Constant(5.0);
   bool allow_high_collision = false;
   // values from deoxys/config/osc-position-controller.yml
