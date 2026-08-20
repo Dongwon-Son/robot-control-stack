@@ -54,6 +54,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-tam", action="store_true", help="Run the motion without enabling TAM (baseline).")
     p.add_argument("--enforce-realtime", action="store_true",
                    help="Require an RT kernel (FrankaConfig.ignore_realtime=False). Default: ignore, single stock machine.")
+    p.add_argument("--rt-priority", type=int, default=80,
+                   help="SCHED_FIFO priority for the 1 kHz control thread (0 disables). Works on a stock kernel "
+                        "when the rtprio rlimit allows it (ulimit -r; /etc/security/limits.conf); "
+                        "falls back to the normal scheduler with a warning otherwise.")
     p.add_argument("--home", action="store_true", help="move_home() before starting.")
     p.add_argument("--motion", choices=("hold", "sine"), default="sine")
     p.add_argument("--sine-amp-deg", type=float, default=10.0)
@@ -91,6 +95,7 @@ def main(argv=None) -> int:
         torque_limit=np.asarray(args.torque_limit, dtype=float),
         kinematic_model_path=meta.mjcf_model_path,
     )
+    robot_cfg.rt_priority = int(args.rt_priority)
     robot_cfg.robot_type = robot_type
     robot_cfg.q_home = meta.q_home
     robot_cfg.joint_limits = meta.joint_limits

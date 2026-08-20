@@ -225,6 +225,8 @@ PYBIND11_MODULE(_core, m) {
                      &rcs::hw::FrankaConfig::tcp_offset_explicit)
       .def_readwrite("async_control", &rcs::hw::FrankaConfig::async_control)
       .def_readwrite("ignore_realtime", &rcs::hw::FrankaConfig::ignore_realtime)
+      .def_readwrite("rt_priority", &rcs::hw::FrankaConfig::rt_priority)
+      .def_readwrite("rt_priority", &rcs::hw::FrankaConfig::rt_priority)
       .def_readwrite("ip", &rcs::hw::FrankaConfig::ip);
 
   rcs::hw::FR3Config default_fr3_config;

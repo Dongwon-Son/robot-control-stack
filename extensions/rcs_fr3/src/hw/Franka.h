@@ -57,6 +57,11 @@ struct FrankaConfig : common::RobotConfig {
   bool tcp_offset_explicit = false;
   bool async_control = false;
   bool ignore_realtime = false;
+  // >0: best-effort SCHED_FIFO at this priority for the async control thread.
+  // Works on stock kernels when the rtprio rlimit allows it (unlike
+  // ignore_realtime=false, which needs a PREEMPT_RT kernel); on failure the
+  // thread keeps the normal scheduler and a warning is printed.
+  int rt_priority = 0;
   size_t dof = 7;
   Eigen::Matrix<double, 2, Eigen::Dynamic, Eigen::ColMajor> joint_limits =
       (Eigen::Matrix<double, 2, Eigen::Dynamic, Eigen::ColMajor>(2, 7) <<
