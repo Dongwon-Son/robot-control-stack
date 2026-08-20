@@ -569,6 +569,14 @@ void Franka::osc() {
         Eigen::VectorXd::Map(&tau_d_rate_limited[0], 7) = tau_total;
       }
 
+      // The robot itself monitors the derivative of the commanded torque
+      // (controller_torque_discontinuity reflex), so the *total* command must
+      // stay rate-continuous w.r.t. the previously commanded torque. This
+      // final limiter only smears residual jumps (e.g. embedding updates)
+      // over a few ms; a steady residual passes through unattenuated.
+      tau_d_rate_limited = franka::limitRate(
+          franka::kMaxTorqueRate, tau_d_rate_limited, robot_state.tau_J_d);
+
       TorqueSafetyGuardFn(tau_d_rate_limited, torque_limit);
 
       this->tam_.finalize_row(
@@ -698,6 +706,14 @@ void Franka::joint_controller() {
                                            gravity_tam, tau_J_d, tau_J);
         Eigen::VectorXd::Map(&tau_d_rate_limited[0], 7) = tau_total;
       }
+
+      // The robot itself monitors the derivative of the commanded torque
+      // (controller_torque_discontinuity reflex), so the *total* command must
+      // stay rate-continuous w.r.t. the previously commanded torque. This
+      // final limiter only smears residual jumps (e.g. embedding updates)
+      // over a few ms; a steady residual passes through unattenuated.
+      tau_d_rate_limited = franka::limitRate(
+          franka::kMaxTorqueRate, tau_d_rate_limited, robot_state.tau_J_d);
 
       TorqueSafetyGuardFn(tau_d_rate_limited, torque_limit);
 
