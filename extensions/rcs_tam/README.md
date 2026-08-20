@@ -58,7 +58,7 @@ hook feeds `tau + gravity` to the adaptor and the vendored inference code
 rejects checkpoints trained otherwise.
 Raise `FrankaConfig.torque_limit` (RCS default 5 Nm clips the residual; the
 example uses 87/87/87/87/12/12/12) and keep the TAM residual clip
-(`robot.tam_set_torque_limits`, default 10/10/10/10/4/4/4) small on first runs.
+(`robot.tam_set_torque_limits`, default 10/10/10/10/2/2/2) small on first runs.
 
 ## Layout
 

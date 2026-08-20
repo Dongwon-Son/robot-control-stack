@@ -84,7 +84,7 @@ def main(argv=None) -> int:
         history_torque_mode=args.history_torque_mode,
         min_patches_before_send=1,
         embedding_interval_s=0.2,
-        residual_torque_limits=np.asarray([10.0, 10.0, 10.0, 10.0, 4.0, 4.0, 4.0]),
+        residual_torque_limits=np.asarray([10.0, 10.0, 10.0, 10.0, 2.0, 2.0, 2.0]),
         enable_ramp_s=0.2,
     )
     tam.start()

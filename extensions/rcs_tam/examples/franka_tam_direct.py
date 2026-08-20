@@ -51,7 +51,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--history-torque-mode", choices=("auto", "applied", "base_tam_fusion"), default="auto")
     p.add_argument("--torque-limit", type=_parse_vec7, default=(87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0),
                    help="RCS FrankaConfig.torque_limit on the gravity-free command (RCS' own 5 Nm default is too tight).")
-    p.add_argument("--residual-clip", type=_parse_vec7, default=(10.0, 10.0, 10.0, 10.0, 4.0, 4.0, 4.0),
+    p.add_argument("--residual-clip", type=_parse_vec7, default=(10.0, 10.0, 10.0, 10.0, 2.0, 2.0, 2.0),
                    help="Per-joint clip of the TAM residual in Nm (single value broadcasts to all joints). "
                         "Start small (e.g. 2) on first runs.")
     p.add_argument("--joint-kp", type=_parse_vec7, default=None, help="RCS joint PD kp override (7 values).")
