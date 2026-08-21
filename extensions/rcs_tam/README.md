@@ -20,9 +20,9 @@ works — the 1 kHz callback then runs without RT scheduling, keep the machine
 lightly loaded and prefer a machine with a GPU for the encoder (the fused
 history encoder is ~20× slower than real time on CPU; embeddings then update
 slower but the 1 kHz residual keeps using the latest one). Importing
-`rcs_tam` sets `XLA_PYTHON_CLIENT_PREALLOCATE=false` (unless already set), so
-the encoder allocates GPU memory on demand and coexists with a policy running
-in the same process (e.g. torch); export the variable yourself to override.
+`rcs_tam` always sets `XLA_PYTHON_CLIENT_PREALLOCATE=false`, so the encoder
+allocates GPU memory on demand and never starves other GPU users (e.g. a
+torch policy in the same process).
 
 ## Install (after building `rcs-core` and `rcs_panda`/`rcs_fr3` from this branch)
 

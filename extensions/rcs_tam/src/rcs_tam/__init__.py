@@ -9,11 +9,11 @@ usage and ``rcs_tam.simadaptor`` for the vendored TAM inference code.
 
 import os as _os
 
-# The encoder shares the GPU with the user's policy in one process; without
-# this JAX preallocates ~75% of device memory at first use and starves a
-# non-JAX policy (e.g. torch). An explicit user setting always wins. Must be
-# set before JAX initializes its backend, hence here at package import.
-_os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+# The encoder shares the GPU with the user's policy; JAX preallocating ~75%
+# of device memory at first use starves everything else, so it is always
+# disabled here (before JAX initializes its backend). The encoder's own
+# allocations are small; on-demand allocation costs it nothing.
+_os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 from rcs_tam.runtime import (  # noqa: E402,F401
     HISTORY_TORQUE_MODE_APPLIED,
