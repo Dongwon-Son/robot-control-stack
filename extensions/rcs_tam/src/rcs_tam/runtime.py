@@ -113,7 +113,7 @@ class TamDeployment:
         residual_torque_limits: Optional[np.ndarray] = None,
         enable_ramp_s: Optional[float] = None,
         bin_path: str | Path | None = None,
-        jax_cache_dir: str | Path | None = None,
+        jax_cache_dir: str | Path | None = "auto",
         runtimes: Any = None,
         log=print,
     ) -> None:
